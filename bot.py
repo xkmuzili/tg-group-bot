@@ -15,7 +15,7 @@ import aiosqlite
 from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, InputFile
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ChatMemberHandler, ContextTypes, filters, PreCheckoutQueryHandler,
+    ChatMemberHandler, ContextTypes, filters,
 )
 
 import config
@@ -92,7 +92,13 @@ async def get_target_user_info(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==================== 授权系统 ====================
 
 async def check_license(update: Update) -> bool:
-    """检查当前群组授权是否有效，无效则提示并返回 False"""
+    """检查当前群组授权是否有效
+    测试阶段：LICENSE_ENFORCE=False 时始终返回 True（免费使用）
+    """
+    # 测试阶段：授权不强制执行
+    if not config.LICENSE_ENFORCE:
+        return True
+
     chat_id = update.effective_chat.id
     # 私聊不检查授权
     if update.effective_chat.type == "private":
@@ -116,7 +122,7 @@ async def check_license(update: Update) -> bool:
         f"🤖 {config.BOT_NAME_CN} ({config.BOT_NAME_EN})\n"
         f"📅 已过期 {days_expired} 天\n\n"
         f"💡 购买授权后即可继续使用全部功能\n"
-        f"💡 管理员命令不受授权限制"
+        f"💡 联系管理员: {config.ADMIN_CONTACT}"
     )
 
     if update.callback_query:
@@ -134,15 +140,18 @@ async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     valid, status, expire_time = await db.is_license_valid(chat_id)
     info = await db.get_license_info(chat_id)
 
-    # 构建状态文本
-    if status == "trial":
-        remaining = (expire_time - datetime.now()).days
-        status_text = f"🆓 试用期中（剩余 {remaining} 天）"
-    elif status == "licensed":
-        remaining = (expire_time - datetime.now()).days
-        status_text = f"✅ 已授权（剩余 {remaining} 天）"
+    # 构建状态文本（测试阶段统一显示免费）
+    if config.LICENSE_ENFORCE:
+        if status == "trial":
+            remaining = (expire_time - datetime.now()).days
+            status_text = f"🆓 试用期中（剩余 {remaining} 天）"
+        elif status == "licensed":
+            remaining = (expire_time - datetime.now()).days
+            status_text = f"✅ 已授权（剩余 {remaining} 天）"
+        else:
+            status_text = "❌ 授权已过期"
     else:
-        status_text = "❌ 授权已过期"
+        status_text = "🆓 测试阶段 - 免费使用"
 
     text = (
         f"🌟 **{config.BOT_NAME_CN}**\n"
@@ -151,17 +160,24 @@ async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{config.BOT_DESCRIPTION}\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📋 **当前状态**\n"
-        f"{status_text}\n"
-        f"📅 安装时间: {info.get('installed_at', '未知')[:10]}\n\n"
+        f"{status_text}\n\n"
+    )
+
+    if config.LICENSE_ENFORCE:
+        text += f"📅 安装时间: {info.get('installed_at', '未知')[:10]}\n\n"
+
+    text += (
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💡 **使用 /start 打开主菜单**\n"
         f"💡 **使用 /help 查看所有命令**"
     )
 
     keyboard = [
-        [InlineKeyboardButton("🚀 开始使用", callback_data="start"),
-         InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")],
+        [InlineKeyboardButton("🚀 开始使用", callback_data="start")],
     ]
+    # 仅在授权强制执行时显示购买按钮
+    if config.LICENSE_ENFORCE:
+        keyboard.append([InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # 发送头像 + 介绍
@@ -185,9 +201,8 @@ async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_buy_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """购买授权页面"""
+    """购买授权页面 - USDT支付"""
     chat_id = update.effective_chat.id
-    info = await db.get_license_info(chat_id)
 
     # 构建套餐列表
     text = (
@@ -195,7 +210,7 @@ async def cmd_buy_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🤖 {config.BOT_NAME_CN} ({config.BOT_NAME_EN})\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💡 购买授权后解锁全部功能\n"
-        f"💡 支持 Telegram Stars 支付\n\n"
+        f"💡 支持 USDT ({config.USDT_NETWORK}) 支付\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📦 **授权套餐**\n\n"
     )
@@ -204,11 +219,11 @@ async def cmd_buy_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for plan_id, plan in config.LICENSE_PLANS.items():
         text += (
             f"{plan['emoji']} **{plan['name']}**\n"
-            f"   📅 {plan['days']}天 | ⭐ {plan['stars']} Stars\n\n"
+            f"   📅 {plan['days']}天 | 💰 {plan['price_usdt']} USDT\n\n"
         )
         keyboard.append([
             InlineKeyboardButton(
-                f"{plan['emoji']} {plan['name']} - {plan['stars']}⭐",
+                f"{plan['emoji']} {plan['name']} - {plan['price_usdt']} USDT",
                 callback_data=f"buy_plan_{plan_id}"
             )
         ])
@@ -223,7 +238,7 @@ async def cmd_buy_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_buy_plan(update: Update, context: ContextTypes.DEFAULT_TYPE, plan_id: str):
-    """处理购买套餐"""
+    """处理购买套餐 - USDT支付"""
     query = update.callback_query
     chat_id = query.message.chat.id
     user_id = query.from_user.id
@@ -233,55 +248,32 @@ async def handle_buy_plan(update: Update, context: ContextTypes.DEFAULT_TYPE, pl
         await query.answer("❌ 套餐不存在", show_alert=True)
         return
 
-    # 创建 Telegram Stars 支付
-    try:
-        # 使用 Telegram Bot API 创建发票
-        from telegram import LabeledPrice
+    # 生成支付信息
+    text = (
+        f"💰 **USDT 支付**\n\n"
+        f"📦 套餐: {plan['emoji']} {plan['name']}\n"
+        f"📅 天数: {plan['days']}天\n"
+        f"💰 金额: **{plan['price_usdt']} USDT**\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📋 **支付步骤：**\n\n"
+        f"1️⃣ 向以下地址转账 {plan['price_usdt']} USDT\n"
+        f"2️⃣ 网络: **{config.USDT_NETWORK}**\n"
+        f"3️⃣ 钱包地址:\n"
+        f"`{config.USDT_WALLET}`\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"⚠️ 转账后请将 **交易哈希(TXID)** 发送给管理员\n"
+        f"👤 管理员: {config.ADMIN_CONTACT}\n\n"
+        f"💡 请在转账备注中写入群组ID: `{chat_id}`"
+    )
 
-        prices = [LabeledPrice(label=plan["name"], amount=plan["stars"])]
+    keyboard = [
+        [InlineKeyboardButton("📋 复制钱包地址", callback_data=f"copy_wallet_{plan_id}")],
+        [InlineKeyboardButton("✅ 已支付，联系管理员", url=f"https://t.me/{config.ADMIN_CONTACT[1:]}")],
+        [InlineKeyboardButton("❌ 取消", callback_data="buy_license")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await context.bot.send_invoice(
-            chat_id=user_id,  # 发送给点击购买的用户
-            title=f"{config.BOT_NAME_CN} - {plan['name']}",
-            description=f"为群组 {chat_id} 购买 {plan['days']} 天授权",
-            payload=f"license_{chat_id}_{plan_id}",
-            provider_token="",  # Telegram Stars 不需要
-            currency="XTR",  # Telegram Stars
-            prices=prices,
-            start_parameter=f"buy_license_{plan_id}",
-        )
-        await query.answer("✅ 请查看私聊中的支付消息", show_alert=True)
-    except Exception as e:
-        await query.answer(f"❌ 创建支付失败: {e}", show_alert=True)
-
-
-async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理成功支付"""
-    payment = update.message.successful_payment
-    payload = payment.telegram_payment_charge_id
-    # payload 格式: license_{chat_id}_{plan_id}
-    parts = payload.split("_")
-    if len(parts) >= 3 and parts[0] == "license":
-        chat_id = int(parts[1])
-        plan_id = "_".join(parts[2:])
-
-        # 添加授权天数
-        success = await db.add_license_days(
-            chat_id, plan_id, payment.total_amount, payload
-        )
-
-        if success:
-            plan = config.LICENSE_PLANS.get(plan_id)
-            await update.message.reply_text(
-                f"✅ **支付成功！**\n\n"
-                f"📦 套餐: {plan['name']}\n"
-                f"📅 天数: +{plan['days']}天\n"
-                f"💰 金额: {payment.total_amount} Stars\n\n"
-                f"🎉 授权已激活，返回群聊即可使用！",
-                parse_mode="Markdown"
-            )
-        else:
-            await update.message.reply_text("❌ 激活授权失败，请联系管理员")
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 # ==================== /start 命令 ====================
@@ -295,12 +287,18 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("✅ 签到", callback_data="checkin")],
         [InlineKeyboardButton("🏆 排行榜", callback_data="rank"),
          InlineKeyboardButton("🛒 商城", callback_data="shop")],
-        [InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")],
     ]
+    # 仅在授权强制执行时显示购买按钮
+    if config.LICENSE_ENFORCE:
+        keyboard.append([InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
         f"🌟 **{config.BOT_NAME_CN}** ({config.BOT_NAME_EN})\n\n"
         f"👋 你好 {escape(update.effective_user.first_name)}！\n\n"
+    )
+    if not config.LICENSE_ENFORCE:
+        text += f"🆓 测试阶段，免费使用\n\n"
+    text += (
         f"💡 使用 /help 查看所有命令\n"
         f"💡 点击下方按钮快速操作"
     )
@@ -1087,12 +1085,8 @@ def main():
     app.add_handler(CommandHandler("delword", cmd_delword))
     app.add_handler(CommandHandler("wordlist", cmd_wordlist))
 
-        # 回调查询
+                # 回调查询
     app.add_handler(CallbackQueryHandler(callback_handler))
-
-        # 支付处理
-    app.add_handler(PreCheckoutQueryHandler(lambda u, c: c.bot.answer_pre_checkout_query(u.pre_checkout_query.id)))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
 
     # 消息处理器
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member))

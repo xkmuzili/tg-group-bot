@@ -847,17 +847,17 @@ def settings():
                 <input type="text" name="admin_contact" value="{{ config.ADMIN_CONTACT }}">
             </div>
 
-            <h3>授权套餐</h3>
+                        <h3>授权套餐</h3>
             <table>
                 <thead>
                     <tr><th>套餐</th><th>天数</th><th>价格 (USDT)</th></tr>
                 </thead>
                 <tbody>
-                    {% for pid, plan in config.LICENSE_PLANS.items() %}
+                    {% for pid, plan in plans.items() %}
                     <tr>
-                        <td>{{ plan.emoji }} {{ plan.name }}</td>
-                        <td>{{ plan.days }}天</td>
-                        <td>{{ plan.price_usdt }} USDT</td>
+                        <td>{{ plan['emoji'] }} {{ plan['name'] }}</td>
+                        <td>{{ plan['days'] }}天</td>
+                        <td>{{ plan['price_usdt'] }} USDT</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -868,7 +868,7 @@ def settings():
         </form>
     </div>
     {% endblock %}
-    """, title="系统设置", active_page="settings", config=config)
+        """, title="系统设置", active_page="settings", config=config, plans=config.LICENSE_PLANS)
 
 
 # ==================== API 接口 ====================

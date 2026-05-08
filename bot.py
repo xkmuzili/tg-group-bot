@@ -270,10 +270,10 @@ async def handle_buy_plan(update: Update, context: ContextTypes.DEFAULT_TYPE, pl
         [InlineKeyboardButton("📋 复制钱包地址", callback_data=f"copy_wallet_{plan_id}")],
         [InlineKeyboardButton("✅ 已支付，联系管理员", url=f"https://t.me/{config.ADMIN_CONTACT[1:]}")],
         [InlineKeyboardButton("❌ 取消", callback_data="buy_license")],
-    ]
+        ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 # ==================== /start 命令 ====================
@@ -1021,7 +1021,7 @@ def main():
     print("🤖 Telegram 群管理机器人启动中...")
 
     # 向 Telegram 注册命令菜单（输入 / 时弹出）
-        commands = [
+    commands = [
         BotCommand("start", "打开主菜单"),
         BotCommand("help", "使用帮助"),
         BotCommand("about", "机器人介绍"),
@@ -1054,7 +1054,7 @@ def main():
     # 创建 Application
     app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
-        # 注册命令处理器
+    # 注册命令处理器
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("about", cmd_about))
@@ -1085,7 +1085,7 @@ def main():
     app.add_handler(CommandHandler("delword", cmd_delword))
     app.add_handler(CommandHandler("wordlist", cmd_wordlist))
 
-                # 回调查询
+    # 回调查询
     app.add_handler(CallbackQueryHandler(callback_handler))
 
     # 消息处理器

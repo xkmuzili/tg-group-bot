@@ -1,20 +1,21 @@
 """
 Telegram 群管理机器人 - 主程序
-功能：广告查杀、签到积分、积分兑换、群管理
+功能：广告查杀、签到积分、积分兑换、群管理、授权系统
 """
 
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from html import escape
 
 import aiosqlite
 
-from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, InputFile
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    ChatMemberHandler, ContextTypes, filters,
+    ChatMemberHandler, ContextTypes, filters, PreCheckoutQueryHandler,
 )
 
 import config
@@ -88,28 +89,225 @@ async def get_target_user_info(update: Update, context: ContextTypes.DEFAULT_TYP
     return None, None
 
 
+# ==================== 授权系统 ====================
+
+async def check_license(update: Update) -> bool:
+    """检查当前群组授权是否有效，无效则提示并返回 False"""
+    chat_id = update.effective_chat.id
+    # 私聊不检查授权
+    if update.effective_chat.type == "private":
+        return True
+
+    valid, status, expire_time = await db.is_license_valid(chat_id)
+
+    if valid:
+        return True
+
+    # 授权过期，发送提示
+    days_expired = (datetime.now() - expire_time).days if expire_time else 0
+    keyboard = [
+        [InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")],
+        [InlineKeyboardButton("📖 介绍", callback_data="about")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    text = (
+        f"⚠️ **授权已过期**\n\n"
+        f"🤖 {config.BOT_NAME_CN} ({config.BOT_NAME_EN})\n"
+        f"📅 已过期 {days_expired} 天\n\n"
+        f"💡 购买授权后即可继续使用全部功能\n"
+        f"💡 管理员命令不受授权限制"
+    )
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup)
+    return False
+
+
+async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """介绍页面 - 展示机器人信息"""
+    chat_id = update.effective_chat.id
+
+    # 获取授权信息
+    valid, status, expire_time = await db.is_license_valid(chat_id)
+    info = await db.get_license_info(chat_id)
+
+    # 构建状态文本
+    if status == "trial":
+        remaining = (expire_time - datetime.now()).days
+        status_text = f"🆓 试用期中（剩余 {remaining} 天）"
+    elif status == "licensed":
+        remaining = (expire_time - datetime.now()).days
+        status_text = f"✅ 已授权（剩余 {remaining} 天）"
+    else:
+        status_text = "❌ 授权已过期"
+
+    text = (
+        f"🌟 **{config.BOT_NAME_CN}**\n"
+        f"✨ {config.BOT_NAME_EN} ✨\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{config.BOT_DESCRIPTION}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📋 **当前状态**\n"
+        f"{status_text}\n"
+        f"📅 安装时间: {info.get('installed_at', '未知')[:10]}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💡 **使用 /start 打开主菜单**\n"
+        f"💡 **使用 /help 查看所有命令**"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("🚀 开始使用", callback_data="start"),
+         InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # 发送头像 + 介绍
+    avatar_path = config.AVATAR_PATH
+    if os.path.exists(avatar_path):
+        if update.callback_query:
+            await update.callback_query.message.delete()
+        photo = InputFile(avatar_path)
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    else:
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+
+
+async def cmd_buy_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """购买授权页面"""
+    chat_id = update.effective_chat.id
+    info = await db.get_license_info(chat_id)
+
+    # 构建套餐列表
+    text = (
+        f"🔓 **购买授权**\n\n"
+        f"🤖 {config.BOT_NAME_CN} ({config.BOT_NAME_EN})\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💡 购买授权后解锁全部功能\n"
+        f"💡 支持 Telegram Stars 支付\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📦 **授权套餐**\n\n"
+    )
+
+    keyboard = []
+    for plan_id, plan in config.LICENSE_PLANS.items():
+        text += (
+            f"{plan['emoji']} **{plan['name']}**\n"
+            f"   📅 {plan['days']}天 | ⭐ {plan['stars']} Stars\n\n"
+        )
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{plan['emoji']} {plan['name']} - {plan['stars']}⭐",
+                callback_data=f"buy_plan_{plan_id}"
+            )
+        ])
+
+    keyboard.append([InlineKeyboardButton("❌ 取消", callback_data="start")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+
+
+async def handle_buy_plan(update: Update, context: ContextTypes.DEFAULT_TYPE, plan_id: str):
+    """处理购买套餐"""
+    query = update.callback_query
+    chat_id = query.message.chat.id
+    user_id = query.from_user.id
+
+    plan = config.LICENSE_PLANS.get(plan_id)
+    if not plan:
+        await query.answer("❌ 套餐不存在", show_alert=True)
+        return
+
+    # 创建 Telegram Stars 支付
+    try:
+        # 使用 Telegram Bot API 创建发票
+        from telegram import LabeledPrice
+
+        prices = [LabeledPrice(label=plan["name"], amount=plan["stars"])]
+
+        await context.bot.send_invoice(
+            chat_id=user_id,  # 发送给点击购买的用户
+            title=f"{config.BOT_NAME_CN} - {plan['name']}",
+            description=f"为群组 {chat_id} 购买 {plan['days']} 天授权",
+            payload=f"license_{chat_id}_{plan_id}",
+            provider_token="",  # Telegram Stars 不需要
+            currency="XTR",  # Telegram Stars
+            prices=prices,
+            start_parameter=f"buy_license_{plan_id}",
+        )
+        await query.answer("✅ 请查看私聊中的支付消息", show_alert=True)
+    except Exception as e:
+        await query.answer(f"❌ 创建支付失败: {e}", show_alert=True)
+
+
+async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理成功支付"""
+    payment = update.message.successful_payment
+    payload = payment.telegram_payment_charge_id
+    # payload 格式: license_{chat_id}_{plan_id}
+    parts = payload.split("_")
+    if len(parts) >= 3 and parts[0] == "license":
+        chat_id = int(parts[1])
+        plan_id = "_".join(parts[2:])
+
+        # 添加授权天数
+        success = await db.add_license_days(
+            chat_id, plan_id, payment.total_amount, payload
+        )
+
+        if success:
+            plan = config.LICENSE_PLANS.get(plan_id)
+            await update.message.reply_text(
+                f"✅ **支付成功！**\n\n"
+                f"📦 套餐: {plan['name']}\n"
+                f"📅 天数: +{plan['days']}天\n"
+                f"💰 金额: {payment.total_amount} Stars\n\n"
+                f"🎉 授权已激活，返回群聊即可使用！",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("❌ 激活授权失败，请联系管理员")
+
+
 # ==================== /start 命令 ====================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """主菜单"""
     keyboard = [
-        [InlineKeyboardButton("📋 帮助", callback_data="help"),
-         InlineKeyboardButton("📊 我的信息", callback_data="mymenu")],
-        [InlineKeyboardButton("✅ 签到", callback_data="checkin"),
-         InlineKeyboardButton("🏆 排行榜", callback_data="rank")],
-        [InlineKeyboardButton("🛒 商城", callback_data="shop")],
+        [InlineKeyboardButton("📖 介绍", callback_data="about"),
+         InlineKeyboardButton("📋 帮助", callback_data="help")],
+        [InlineKeyboardButton("📊 我的信息", callback_data="mymenu"),
+         InlineKeyboardButton("✅ 签到", callback_data="checkin")],
+        [InlineKeyboardButton("🏆 排行榜", callback_data="rank"),
+         InlineKeyboardButton("🛒 商城", callback_data="shop")],
+        [InlineKeyboardButton("🔓 购买授权", callback_data="buy_license")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = (
-        f"🤖 星辰守望者 - 群管理机器人\n\n"
+        f"🌟 **{config.BOT_NAME_CN}** ({config.BOT_NAME_EN})\n\n"
         f"👋 你好 {escape(update.effective_user.first_name)}！\n\n"
         f"💡 使用 /help 查看所有命令\n"
         f"💡 点击下方按钮快速操作"
     )
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     else:
-        await update.message.reply_text(text, reply_markup=reply_markup)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 # ==================== /help 命令 ====================
@@ -725,6 +923,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "help":
         await cmd_help(update, context)
+    elif data == "about":
+        await cmd_about(update, context)
+    elif data == "buy_license":
+        await cmd_buy_license(update, context)
+    elif data.startswith("buy_plan_"):
+        plan_id = data.replace("buy_plan_", "")
+        await handle_buy_plan(update, context, plan_id)
     elif data == "checkin":
         # 模拟 message
         update.message = query.message
@@ -818,9 +1023,11 @@ def main():
     print("🤖 Telegram 群管理机器人启动中...")
 
     # 向 Telegram 注册命令菜单（输入 / 时弹出）
-    commands = [
+        commands = [
         BotCommand("start", "打开主菜单"),
         BotCommand("help", "使用帮助"),
+        BotCommand("about", "机器人介绍"),
+        BotCommand("buy", "购买授权"),
         BotCommand("checkin", "每日签到"),
         BotCommand("points", "查看积分"),
         BotCommand("rank", "积分排行"),
@@ -849,9 +1056,11 @@ def main():
     # 创建 Application
     app = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
 
-    # 注册命令处理器
+        # 注册命令处理器
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("about", cmd_about))
+    app.add_handler(CommandHandler("buy", cmd_buy_license))
 
     # 积分系统
     app.add_handler(CommandHandler("checkin", cmd_checkin))
@@ -878,8 +1087,12 @@ def main():
     app.add_handler(CommandHandler("delword", cmd_delword))
     app.add_handler(CommandHandler("wordlist", cmd_wordlist))
 
-    # 回调查询
+        # 回调查询
     app.add_handler(CallbackQueryHandler(callback_handler))
+
+        # 支付处理
+    app.add_handler(PreCheckoutQueryHandler(lambda u, c: c.bot.answer_pre_checkout_query(u.pre_checkout_query.id)))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, handle_successful_payment))
 
     # 消息处理器
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member))

@@ -86,35 +86,13 @@ async def init_db():
                 exchanged_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
 
-                        CREATE TABLE IF NOT EXISTS checkin_records (
+            CREATE TABLE IF NOT EXISTS checkin_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 chat_id INTEGER NOT NULL,
                 checkin_date TEXT NOT NULL,
                 points_earned INTEGER DEFAULT 0,
                 UNIQUE(user_id, chat_id, checkin_date)
-            );
-
-            CREATE TABLE IF NOT EXISTS bot_licenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id INTEGER NOT NULL UNIQUE,
-                installed_at TEXT NOT NULL,
-                trial_end TEXT NOT NULL,
-                license_end TEXT,
-                is_licensed INTEGER DEFAULT 0,
-                total_days_purchased INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS license_payments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id INTEGER NOT NULL,
-                plan_id TEXT NOT NULL,
-                stars_paid INTEGER NOT NULL,
-                days_added INTEGER NOT NULL,
-                payment_id TEXT,
-                paid_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
         """)
         await db.commit()
@@ -165,6 +143,19 @@ async def get_user_info(chat_id, user_id):
         columns = [desc[0] for desc in cursor.description]
         return dict(zip(columns, row))
 
+
+
+
+async def get_all_group_users(chat_id):
+    """获取群内所有用户"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT * FROM group_users WHERE chat_id=?",
+            (chat_id,)
+        )
+        rows = await cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
 
 async def add_points(chat_id, user_id, points, reason=""):
     """添加积分"""
@@ -547,108 +538,3 @@ async def get_pending_verifications(chat_id):
             (chat_id,)
         )
         return await cursor.fetchall()
-
-
-# ==================== 授权系统 ====================
-
-async def init_license(chat_id):
-    """初始化群组授权（首次安装时调用）"""
-    now = datetime.now()
-    trial_end = now + timedelta(days=config.TRIAL_DAYS)
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT id FROM bot_licenses WHERE chat_id=?", (chat_id,)
-        )
-        if await cursor.fetchone():
-            return  # 已存在
-        await db.execute(
-            """INSERT INTO bot_licenses (chat_id, installed_at, trial_end, is_licensed)
-               VALUES (?, ?, ?, 0)""",
-            (chat_id, now.isoformat(), trial_end.isoformat())
-        )
-        await db.commit()
-
-
-async def get_license_info(chat_id):
-    """获取群组授权信息"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT * FROM bot_licenses WHERE chat_id=?", (chat_id,)
-        )
-        row = await cursor.fetchone()
-        if not row:
-            await init_license(chat_id)
-            return await get_license_info(chat_id)
-        columns = [desc[0] for desc in cursor.description]
-        return dict(zip(columns, row))
-
-
-async def is_license_valid(chat_id):
-    """检查授权是否有效（试用期内或已购买授权）"""
-    info = await get_license_info(chat_id)
-    now = datetime.now()
-
-    # 检查试用期
-    trial_end = datetime.fromisoformat(info["trial_end"])
-    if now <= trial_end:
-        return True, "trial", trial_end
-
-    # 检查购买的授权
-    if info.get("is_licensed") and info.get("license_end"):
-        license_end = datetime.fromisoformat(info["license_end"])
-        if now <= license_end:
-            return True, "licensed", license_end
-
-    return False, "expired", None
-
-
-async def add_license_days(chat_id, plan_id, stars_paid, payment_id=None):
-    """添加授权天数"""
-    plan = config.LICENSE_PLANS.get(plan_id)
-    if not plan:
-        return False
-
-    info = await get_license_info(chat_id)
-    now = datetime.now()
-
-    # 计算新的授权结束时间
-    if info.get("is_licensed") and info.get("license_end"):
-        current_end = datetime.fromisoformat(info["license_end"])
-        if current_end > now:
-            new_end = current_end + timedelta(days=plan["days"])
-        else:
-            new_end = now + timedelta(days=plan["days"])
-    else:
-        new_end = now + timedelta(days=plan["days"])
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """UPDATE bot_licenses
-               SET is_licensed=1, license_end=?, total_days_purchased=total_days_purchased+?,
-                   updated_at=?
-               WHERE chat_id=?""",
-            (new_end.isoformat(), plan["days"], now.isoformat(), chat_id)
-        )
-        await db.execute(
-            """INSERT INTO license_payments (chat_id, plan_id, stars_paid, days_added, payment_id)
-               VALUES (?, ?, ?, ?, ?)""",
-            (chat_id, plan_id, stars_paid, plan["days"], payment_id)
-        )
-        await db.commit()
-
-    return True
-
-
-async def get_license_payments(chat_id):
-    """获取授权购买记录"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT * FROM license_payments WHERE chat_id=? ORDER BY paid_at DESC",
-            (chat_id,)
-        )
-        rows = await cursor.fetchall()
-        result = []
-        for row in rows:
-            columns = [desc[0] for desc in cursor.description]
-            result.append(dict(zip(columns, row)))
-        return result

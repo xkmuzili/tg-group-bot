@@ -91,39 +91,7 @@ async def get_target_user_info(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==================== /start 命令 ====================
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """主菜单 / 深度链接入口"""
-    # 检查深度链接参数（如 verify_{chat_id}）
-    args = context.args if context.args else []
-    if args and args[0].startswith("verify_"):
-        # 用户从群内验证按钮跳转过来
-        try:
-            target_chat_id = int(args[0].split("_", 1)[1])
-        except (ValueError, IndexError):
-            target_chat_id = None
-
-        if target_chat_id:
-            user_id = update.effective_user.id
-            # 检查是否已验证
-            if await db.is_verified(target_chat_id, user_id):
-                text = "✅ 你已经验证过了，可以直接在群里发言！"
-                await update.message.reply_text(text)
-                return
-
-            # 显示验证确认按钮
-            keyboard = [
-                [InlineKeyboardButton("✅ 确认验证", callback_data=f"confirm_verify_{target_chat_id}")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            text = (
-                f"🔐 **入群验证**\n\n"
-                f"你好 {escape(update.effective_user.first_name)}！\n"
-                f"请点击下方按钮完成验证\n\n"
-                f"⚠️ 验证后即可在群里正常发言"
-            )
-            await update.message.reply_text(text, reply_markup=reply_markup)
-            return
-
-    # 正常主菜单
+    """主菜单"""
     keyboard = [
         [InlineKeyboardButton("📋 帮助", callback_data="help"),
          InlineKeyboardButton("📊 我的信息", callback_data="mymenu")],
@@ -646,74 +614,17 @@ async def cmd_wordlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 
-
-
-async def cmd_verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """管理员发验证链接到群里，用户点击跳转Bot验证"""
-    user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
-
-    if not is_admin(user_id, chat_id):
-        await update.message.reply_text("❌ 仅管理员可使用此命令")
-        return
-
-    # 获取 bot username
-    bot_info = await context.bot.get_me()
-    bot_username = bot_info.username
-
-    # 统计未验证用户
-    all_users = await db.get_all_group_users(chat_id)
-    unverified = [u for u in all_users if not u.get("is_verified")]
-    unverified_count = len(unverified)
-
-    # 群里弹出验证按钮，用户点击跳转 Bot 私聊
-    verify_url = f"https://t.me/{bot_username}?start=verify_{chat_id}"
-    keyboard = [
-        [InlineKeyboardButton("🔐 点击验证", url=verify_url)]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        f"🔐 **入群验证**\n\n"
-        f"未验证用户: {unverified_count} 人\n"
-        f"请点击下方按钮，跳转到 Bot 完成验证\n\n"
-        f"⚠️ 验证后即可在群里正常发言",
-        reply_markup=reply_markup
-    )
-
+# ==================== 消息处理 ====================
 
 async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """新成员加入 - 入群验证（限制发言+弹窗提示）"""
+    """新成员加入 - 入群验证"""
     chat_id = update.effective_chat.id
     for member in update.message.new_chat_members:
         if member.is_bot:
             continue
         # 确保用户在数据库中
         await db.ensure_user(chat_id, member.id, member.username, member.first_name)
-        # 先限制发言：禁止发送文字、图片、贴纸等
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=member.id,
-                permissions=ChatPermissions(
-                    can_send_messages=False,
-                    can_send_audios=False,
-                    can_send_documents=False,
-                    can_send_photos=False,
-                    can_send_videos=False,
-                    can_send_video_notes=False,
-                    can_send_voice_notes=False,
-                    can_send_polls=False,
-                    can_send_other_messages=False,
-                    can_add_web_page_previews=False,
-                    can_invite_users=False,
-                    can_change_info=False,
-                    can_pin_messages=False,
-                    can_manage_topics=False,
-                )
-            )
-        except Exception as e:
-            print(f"[WARN] restrict_chat_member failed for {member.id}: {e}")
-        # 发送验证提示消息
+        # 发送验证消息
         name = member.first_name or member.username or "新成员"
         keyboard = [
             [InlineKeyboardButton("✅ 点击验证", callback_data=f"verify_{member.id}")]
@@ -722,8 +633,7 @@ async def handle_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             f"👋 欢迎 {escape(name)} 加入本群！\n\n"
             f"🔐 请先完成验证才能发言\n"
-            f"点击下方按钮，我会私聊你完成验证\n\n"
-            f"⚠️ 未验证用户将被限制发言"
+            f"点击下方按钮，我会私聊你完成验证"
         )
         await update.message.reply_text(text, reply_markup=reply_markup)
 
@@ -747,14 +657,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 确保用户在数据库中
     await db.ensure_user(chat_id, user_id, username, first_name)
 
-    # 检查是否已验证（未验证用户拦截消息）
+        # 检查是否已验证（未验证则拦截）
+    # 管理员自动跳过验证
     if not is_admin(user_id, chat_id) and not await db.is_verified(chat_id, user_id):
-        # 删除未验证用户的消息
         try:
             await message.delete()
         except Exception:
             pass
-        # 每5条提醒一次（避免刷屏）
+        # 每5条消息才提醒一次，避免刷屏
         import random
         if random.randint(1, 5) == 1:
             keyboard = [
@@ -762,11 +672,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await message.reply_text(
-                f"⚠️ {escape(first_name)}，请先完成验证才能发言",
+                f"⚠️ {escape(first_name)}，请先完成验证才能发言\n"
+                f"点击下方按钮，我会私聊你完成验证",
                 reply_markup=reply_markup
             )
-        return  # 不处理未验证用户的消息
+        return
 
+    # 检查广告
     settings = await db.get_group_settings(chat_id)
     if settings.get("anti_spam_enabled", 1):
         result = await anti_spam.check_message(message, user_id, chat_id)
@@ -872,30 +784,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = query.from_user.id
         # 标记已验证
         await db.set_verified(chat_id, user_id, True)
-        # 解除群内发言限制
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=user_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_audios=True,
-                    can_send_documents=True,
-                    can_send_photos=True,
-                    can_send_videos=True,
-                    can_send_video_notes=True,
-                    can_send_voice_notes=True,
-                    can_send_polls=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True,
-                    can_invite_users=True,
-                    can_change_info=True,
-                    can_pin_messages=True,
-                    can_manage_topics=True,
-                )
-            )
-        except Exception as e:
-            print(f"[WARN] unrestrict_chat_member failed for {user_id}: {e}")
         text = (
             f"✅ **验证成功！**\n\n"
             f"你现在可以在群里正常发言了\n"
@@ -952,7 +840,6 @@ def main():
         BotCommand("addword", "添加违禁词"),
         BotCommand("delword", "删除违禁词"),
         BotCommand("wordlist", "查看违禁词列表"),
-        BotCommand("verify", "重发验证(管理员)"),
     ]
 
     async def post_init(application):
@@ -990,7 +877,6 @@ def main():
     app.add_handler(CommandHandler("addword", cmd_addword))
     app.add_handler(CommandHandler("delword", cmd_delword))
     app.add_handler(CommandHandler("wordlist", cmd_wordlist))
-    app.add_handler(CommandHandler("verify", cmd_verify))
 
     # 回调查询
     app.add_handler(CallbackQueryHandler(callback_handler))

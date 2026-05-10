@@ -5,7 +5,6 @@ Telegram 群管理机器人 - 广告过滤模块
 
 import re
 from datetime import datetime, timedelta
-from telegram import ChatPermissions
 import database as db
 import config
 
@@ -63,7 +62,7 @@ async def check_message(message, user_id, chat_id):
 
     # 2. 检查链接数量
     links = re.findall(r'https?://\S+|t\.me/\S+', text)
-    if len(links) > 10:
+    if len(links) > config.MAX_LINKS_COUNT:
         score += 2
         reasons.append(f"链接过多({len(links)}个)")
 
@@ -89,12 +88,12 @@ async def check_message(message, user_id, chat_id):
                 if (datetime.now() - join_time).total_seconds() < restrict_seconds:
                     # 新用户，链接直接判为广告
                     if links:
-                        score += 1
+                        score += 5
                         reasons.append("新用户发链接")
             except Exception:
                 pass
 
-    is_spam = score >= 5
+    is_spam = score >= 3
     reason = "; ".join(reasons) if reasons else ""
 
     return {"is_spam": is_spam, "reason": reason, "score": score}

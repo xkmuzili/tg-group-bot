@@ -19,7 +19,6 @@ from telegram.ext import (
 
 import config
 import database as db
-from database import now_cn
 import anti_spam
 
 # ==================== 日志配置 ====================
@@ -246,8 +245,6 @@ async def cmd_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     items = await db.get_shop_items()
     text = "🛒 **积分商城**\n\n"
     for item_id, item in items.items():
-        if not item.get("enabled", 1):
-            continue
         text += f"**{item['name']}**\n"
         text += f"  📝 {item['description']}\n"
         text += f"  💰 {item['price']}积分 | 库存: {item['stock']}\n"
@@ -269,26 +266,10 @@ async def cmd_exchange(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = update.effective_user.first_name
 
     await db.ensure_user(chat_id, user_id, username, first_name)
-    success, message, extra = await db.buy_item(user_id, chat_id, item_id)
+    success, message = await db.buy_item(user_id, chat_id, item_id)
 
     if success:
         await update.message.reply_text(f"✅ {message}")
-        # 如果有兑换码，私信发给用户
-        if extra and extra.get("card_code"):
-            card_code = extra["card_code"]
-            card_days = extra["card_days"]
-            private_msg = ("🎫 你的IPTV兑换码：" + chr(10) + chr(10) + f"`{card_code}`" + chr(10) + chr(10) + f"天数：{card_days}天" + chr(10) + chr(10) + "请复制兑换码到IPTV管理面板使用")
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=private_msg,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                # 如果私信发送失败（用户未开启私信），在群里补充提示
-                await update.message.reply_text(
-                    "⚠️ 兑换码已发放，但无法私信发送。请先给机器人发送一条消息开启私信，然后重新使用 /myitems 查看。"
-                )
     else:
         await update.message.reply_text(f"❌ {message}")
 
@@ -334,7 +315,7 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        until = now_cn() + timedelta(hours=1)
+        until = datetime.now() + timedelta(hours=1)
         await update.effective_chat.restrict_member(
             target_id,
             permissions=ChatPermissions(can_send_messages=False),
@@ -758,10 +739,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message or not message.from_user:
         return
 
-    # 只处理群组消息，忽略私聊
-    if message.chat.type not in ["group", "supergroup"]:
-        return
-
     user_id = message.from_user.id
     chat_id = message.chat.id
     username = message.from_user.username
@@ -804,7 +781,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         now = time.time()
         last_msg_time = user.get("last_message_time", 0)
         msg_points_date = user.get("message_points_date", "")
-        today = now_cn().strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
 
         if now - last_msg_time >= config.MESSAGE_POINTS_INTERVAL:
             if msg_points_date == today:
@@ -1028,11 +1005,6 @@ def main():
 
     # 初始化数据库
     asyncio.get_event_loop().run_until_complete(db.init_db())
-
-    # 将所有已有用户标记为已验证
-    # Bot后于群成员加入时，无法对已有成员进行验证，默认它们已通过验证
-    # 只有Bot启动后新加入的成员才会触发入群验证流程
-    asyncio.get_event_loop().run_until_complete(db.mark_all_existing_verified())
 
     print("✅ Bot 已启动，开始监听消息...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

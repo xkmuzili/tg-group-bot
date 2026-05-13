@@ -4,13 +4,7 @@ Telegram 群管理机器人 - 广告过滤模块
 """
 
 import re
-from datetime import datetime, timedelta, timezone
-
-# 统一使用 UTC+8 时区
-_TZ_CN = timezone(timedelta(hours=8))
-
-def _now_cn():
-    return datetime.now(_TZ_CN)
+from datetime import datetime, timedelta
 from telegram import ChatPermissions
 import database as db
 import config
@@ -92,7 +86,7 @@ async def check_message(message, user_id, chat_id):
                 join_time = datetime.fromisoformat(joined_at)
                 settings = await db.get_group_settings(chat_id)
                 restrict_seconds = settings.get("new_user_restrict_seconds", config.NEW_USER_RESTRICT_SECONDS)
-                if (_now_cn() - join_time).total_seconds() < restrict_seconds:
+                if (datetime.now() - join_time).total_seconds() < restrict_seconds:
                     # 新用户，链接直接判为广告
                     if links:
                         score += 1
@@ -145,7 +139,7 @@ async def handle_spam_message(message, user_id, chat_id, result):
             await message.chat.unban_member(user_id)
             await message.reply(f"👢 已踢出用户\n原因: {result['reason']}\n{msg}")
         elif action == "mute":
-            until = _now_cn() + timedelta(hours=1)
+            until = datetime.now() + timedelta(hours=1)
             # 使用空权限实现禁言
             await message.chat.restrict_member(
                 user_id,
@@ -173,6 +167,6 @@ async def is_user_new(user_id: int, chat_id: int) -> bool:
         join_time = datetime.fromisoformat(joined_at)
         settings = await db.get_group_settings(chat_id)
         restrict_seconds = settings.get("new_user_restrict_seconds", config.NEW_USER_RESTRICT_SECONDS)
-        return (_now_cn() - join_time).total_seconds() < restrict_seconds
+        return (datetime.now() - join_time).total_seconds() < restrict_seconds
     except Exception:
         return True

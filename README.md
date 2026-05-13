@@ -78,7 +78,6 @@ python admin_panel.py
 | `/shop` | 积分商城 |
 | `/exchange <ID>` | 兑换商品 |
 | `/myitems` | 我的物品 |
-| `/verify` | 群内触发验证（弹出按钮跳转私聊） |
 
 ### 管理员命令
 

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑管理员' if admin else '添加管理员' }}{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>{{ '✏️ 编辑管理员' if admin else '➕ 添加管理员' }}</h2>
+</div>
+<div class="card" style="max-width:600px;">
+    <form method="POST">
+        <div class="form-group">
+            <label>用户名</label>
+            <input type="text" name="username" value="{{ admin.username if admin else '' }}" {{ 'readonly' if admin else '' }} required placeholder="登录用户名">
+        </div>
+        <div class="form-group">
+            <label>密码 {{ '(留空则不修改)' if admin else '' }}</label>
+            <input type="password" name="password" {{ '' if admin else 'required' }} placeholder="{{ '留空则不修改' if admin else '登录密码' }}">
+        </div>
+        <div class="form-group">
+            <label>角色</label>
+            <select name="role" id="roleSelect">
+                {% if current_role == 'creator' %}
+                    <option value="super_admin" {{ 'selected' if admin and admin.role == 'super_admin' }}>超级管理员</option>
+                    <option value="admin" {{ 'selected' if admin and admin.role == 'admin' }}>管理员</option>
+                {% elif current_role == 'super_admin' %}
+                    <option value="admin" {{ 'selected' if admin and admin.role == 'admin' }}>管理员</option>
+                {% else %}
+                    <option value="admin">管理员</option>
+                {% endif %}
+            </select>
+            {% if current_role == 'super_admin' %}
+            <p style="color:var(--text-muted); font-size:12px; margin-top:4px;">超级管理员只能创建管理员。如需创建其他超管，请联系创建者。</p>
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label>Telegram ID (可选)</label>
+            <input type="text" name="telegram_id" value="{{ admin.telegram_id if admin else '' }}" placeholder="关联Telegram账号ID">
+        </div>
+
+        <div class="form-group">
+            <label>可管理的群组</label>
+            <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;">勾选该管理员可以管理的群，不勾选则无法访问群设置</p>
+            <div style="background:var(--bg-primary); border:1px solid var(--border); border-radius:8px; padding:12px; max-height:200px; overflow-y:auto;">
+                {% if groups %}
+                    {% for group in groups %}
+                    <label style="display:flex; align-items:center; gap:8px; padding:6px 0; cursor:pointer; color:var(--text-primary);">
+                        <input type="checkbox" name="managed_groups" value="{{ group.chat_id }}"
+                            {% if group.chat_id in managed_groups %}checked{% endif %}
+                            style="width:16px; height:16px;">
+                        <span>{{ group.title or group.chat_id }}</span>
+                        <span style="color:var(--text-muted); font-size:12px;">({{ group.chat_id }})</span>
+                    </label>
+                    {% endfor %}
+                {% else %}
+                    <p style="color:var(--text-muted);">暂无群组数据</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if admin and login_url %}
+        <div class="form-group">
+            <label>独立登录链接</label>
+            <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;">将此链接发给管理员，可直接登录后台（无需输入用户名密码）</p>
+            <div style="display:flex; gap:8px;">
+                <input type="text" value="{{ login_url }}" readonly id="loginUrl" style="flex:1; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-primary); color:var(--accent); font-size:13px;">
+                <button type="button" class="btn btn-primary" onclick="copyUrl()">复制</button>
+            </div>
+            {% if current_role == 'creator' %}
+            <div style="margin-top:8px;">
+                <button type="button" class="btn btn-sm btn-warning" onclick="if(confirm('重新生成后旧链接将失效，确定？')) regenToken()">重新生成链接</button>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div style="display:flex; gap:8px; margin-top:20px;">
+            <button type="submit" class="btn btn-primary">{{ '保存修改' if admin else '添加管理员' }}</button>
+            <a href="{{ url_for('admins_list') }}" class="btn" style="background:var(--bg-hover); color:var(--text-primary); text-decoration:none;">取消</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyUrl() {
+    const input = document.getElementById('loginUrl');
+    input.select();
+    document.execCommand('copy');
+    alert('链接已复制');
+}
+{% if admin %}
+function regenToken() {
+    fetch('{{ url_for("admin_regen_token", admin_id=admin.id) }}', {method: 'POST'}).then(() => location.reload());
+}
+{% endif %}
+</script>
+{% endblock %}

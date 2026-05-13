@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}排行榜 - 星辰守望者{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>🏆 排行榜</h2>
+</div>
+<div class="card">
+    <form method="GET" class="search-bar">
+        <select name="chat_id" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-primary); color:var(--text-primary);">
+            {% for g in groups %}
+            <option value="{{ g.chat_id }}" {% if chat_id == g.chat_id %}selected{% endif %}>{{ g.title or ("群组 " ~ g.chat_id) }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">查看</button>
+    </form>
+    <table>
+        <thead>
+            <tr><th>#</th><th>用户</th><th>积分</th><th>累计</th><th>签到连续</th><th>等级</th><th>VIP</th></tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+            <td>
+                {% if loop.index == 1 %}🥇
+                {% elif loop.index == 2 %}🥈
+                {% elif loop.index == 3 %}🥉
+                {% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td><strong>{{ u.username or u.first_name or u.user_id }}</strong><br><span style="color:var(--text-muted); font-size:12px;">ID: {{ u.user_id }}</span></td>
+            <td><strong style="color:var(--accent);">{{ u.points }}</strong></td>
+            <td>{{ u.total_points }}</td>
+            <td>{{ u.checkin_streak }}天</td>
+            <td>Lv.{{ u.level or 1 }}</td>
+            <td>{% if u.is_vip %}<span class="badge badge-warning">VIP</span>{% else %}--{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% if not users %}
+        <tr><td colspan="7" style="text-align:center; color:var(--text-muted);">暂无数据</td></tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

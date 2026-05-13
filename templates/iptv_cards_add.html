@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}导入IPTV兑换码{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-upload me-2"></i>导入 IPTV 兑换码</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label">兑换码 <span class="text-danger">*</span></label>
+                        <textarea name="codes" class="form-control font-monospace" rows="12" placeholder="每行一个兑换码&#10;&#10;例如：&#10;ABC123-DEF456-GHI789&#10;XYZ789-UVM456-RTW123&#10;..."></textarea>
+                        <div class="form-text">支持批量导入，每行一个兑换码。重复的码会自动跳过。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">兑换天数 <span class="text-danger">*</span></label>
+                        <select name="days" class="form-select" style="max-width:200px">
+                            <option value="7">7天</option>
+                            <option value="15">15天</option>
+                            <option value="30" selected>30天</option>
+                            <option value="60">60天</option>
+                            <option value="90">90天</option>
+                            <option value="180">180天</option>
+                            <option value="365">365天</option>
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i>导入</button>
+                        <a href="{{ url_for('iptv_cards_list') }}" class="btn btn-outline-secondary">返回</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

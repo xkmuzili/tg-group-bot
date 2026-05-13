@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="{{ current_theme | default('dark') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}星辰守望者管理面板{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+        }
+        [data-theme="light"] {
+            --bg-primary: #f1f5f9;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-hover: #f8fafc;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 240px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-brand {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px;
+        }
+        .sidebar-brand h1 {
+            font-size: 18px;
+            color: var(--accent);
+        }
+        .sidebar-brand small {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .nav-item {
+            display: block;
+            padding: 10px 20px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .nav-item.active { background: var(--accent); color: white; }
+        .nav-item span { margin-right: 8px; }
+        .main { flex: 1; margin-left: 240px; padding: 24px; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .header h2 { font-size: 24px; }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--accent);
+        }
+        .stat-card .label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        tr:hover { background: var(--bg-hover); }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .flash {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .flash-success { background: rgba(34,197,94,0.15); color: var(--success); border: 1px solid var(--success); }
+        .flash-error { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid var(--danger); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-info { background: rgba(6,182,212,0.15); color: var(--info); }
+        .pagination {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            justify-content: center;
+        }
+        .pagination a, .pagination span {
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .pagination a:hover { background: var(--bg-hover); }
+        .pagination .active { background: var(--accent); color: white; }
+        .theme-toggle {
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .search-bar input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; }
+            .form-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h1>🛡️ 星辰守望者</h1>
+                <small>Stellar Warden v4.0</small>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                <span>📊</span> 仪表盘
+            </a>
+            <a href="{{ url_for('users_list') }}" class="nav-item {% if request.endpoint in ('users_list', 'users_group') %}active{% endif %}">
+                <span>👥</span> 用户管理
+            </a>
+            <a href="{{ url_for('shop_list') }}" class="nav-item {% if request.endpoint == 'shop_list' %}active{% endif %}">
+                <span>🛒</span> 商品管理
+            </a>
+            <a href="{{ url_for('cards_list') }}" class="nav-item {% if request.endpoint and 'card' in request.endpoint %}active{% endif %}">
+                <span>🎫</span> 兑换卡管理
+            </a>
+            <a href="{{ url_for('groups_list') }}" class="nav-item {% if request.endpoint == 'groups_list' %}active{% endif %}">
+                <span>💬</span> 群组设置
+            </a>
+            <a href="{{ url_for('leaderboard') }}" class="nav-item {% if request.endpoint == 'leaderboard' %}active{% endif %}">
+                <span>🏆</span> 排行榜
+            </a>
+                        <a href="{{ url_for('admins_list') }}" class="nav-item {% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}">
+                <span>👑</span> 管理员
+            </a>
+            <a href="{{ url_for('logs_list') }}" class="nav-item {% if request.endpoint == 'logs_list' %}active{% endif %}">
+                <span>📋</span> 操作日志
+            </a>
+            <div style="padding: 20px; border-top: 1px solid var(--border); margin-top: auto;">
+                <button class="theme-toggle" onclick="toggleTheme()" style="width: 100%; margin-bottom: 8px;">
+                    🌓 切换主题
+                </button>
+                <a href="{{ url_for('logout') }}" class="nav-item" style="padding: 8px 0; text-align: center;">
+                    🚪 退出登录
+                </a>
+            </div>
+        </nav>
+        <main class="main">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            fetch('/theme/' + next, { method: 'POST' });
+        }
+        // 自动隐藏 flash
+        setTimeout(() => {
+            document.querySelectorAll('.flash').forEach(el => el.style.display = 'none');
+        }, 3000);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

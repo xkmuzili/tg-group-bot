@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}添加兑换码{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>➕ 添加兑换码</h2>
+    <a href="{{ url_for('cards_list') }}" class="btn" style="background:var(--bg-hover);color:var(--text-primary);">返回列表</a>
+</div>
+<div class="card" style="max-width:600px;">
+    {% if error %}
+    <div style="background:var(--danger);color:#fff;padding:10px;border-radius:8px;margin-bottom:16px;">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+        <div class="form-group">
+            <label>兑换码 *</label>
+            <input type="text" name="code" required placeholder="输入兑换码">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>有效天数</label>
+                <input type="number" name="days" value="7" min="1">
+            </div>
+            <div class="form-group">
+                <label>卡类型</label>
+                <select name="card_type">
+                    <option value="normal">普通</option>
+                    <option value="premium">高级</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>批次名称</label>
+            <input type="text" name="batch_name" placeholder="可选，用于标识来源">
+        </div>
+        <div class="form-group">
+            <label>绑定群组</label>
+            <select name="bind_chat_id" id="bindChatId">
+                <option value="">不绑定（通用）</option>
+                {% for g in groups %}
+                <option value="{{ g.chat_id }}">{{ g.title or g.chat_id }}</option>
+                {% endfor %}
+            </select>
+            <small style="color:var(--text-secondary);">绑定后该码只能在指定群组的商品中使用</small>
+        </div>
+        <div class="form-group">
+            <label>绑定商品</label>
+            <select name="bind_item_id" id="bindItemId">
+                <option value="">不绑定（通用）</option>
+                {% for item in shop_items %}
+                <option value="{{ item.item_id }}" data-chat-id="{{ item.chat_id }}">{{ item.name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color:var(--text-secondary);">绑定后该码只能被指定商品使用</small>
+        </div>
+        <button type="submit" class="btn btn-success">添加兑换码</button>
+    </form>
+</div>
+<script>
+(function(){
+    var chatId = document.getElementById('bindChatId');
+    var itemId = document.getElementById('bindItemId');
+    var allOpts = Array.from(itemId.options).slice(1); // skip "不绑定"
+
+    chatId.addEventListener('change', function(){
+        var selected = this.value;
+        // 清空商品下拉框（保留第一个"不绑定"）
+        while(itemId.options.length > 1) itemId.remove(1);
+        // 重新填充匹配的商品
+        allOpts.forEach(function(opt){
+            if(!selected || opt.getAttribute('data-chat-id') === selected){
+                itemId.appendChild(opt.cloneNode(true));
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}群组管理 - 星辰守望者{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>💬 群组管理</h2>
+</div>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>群组名称</th><th>用户数</th><th>总积分</th><th>欢迎消息</th><th>反广告</th><th>签到</th><th>商城</th><th>验证</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+        {% for g in groups %}
+        {% set s = group_settings.get(g.chat_id) %}
+        <tr>
+            <td><strong>{{ g.title or ("群组 " ~ g.chat_id) }}</strong><br><span style="color:var(--text-muted);font-size:11px;">{{ g.chat_id }}</span></td>
+            <td>{{ g.user_count }}</td>
+            <td>{{ g.total_points or 0 }}</td>
+            <td>{% if s and s.welcome_enabled %}<span class="badge badge-success">开</span>{% else %}<span class="badge badge-danger">关</span>{% endif %}</td>
+            <td>{% if s and s.anti_spam_enabled %}<span class="badge badge-success">开</span>{% else %}<span class="badge badge-danger">关</span>{% endif %}</td>
+            <td>{% if s and s.checkin_enabled %}<span class="badge badge-success">开</span>{% else %}<span class="badge badge-danger">关</span>{% endif %}</td>
+            <td>{% if s and s.shop_enabled %}<span class="badge badge-success">开</span>{% else %}<span class="badge badge-danger">关</span>{% endif %}</td>
+            <td>{% if s and s.verify_enabled %}<span class="badge badge-warning">开</span>{% else %}<span class="badge badge-info">关</span>{% endif %}</td>
+            <td><a href="{{ url_for('group_settings_edit', chat_id=g.chat_id) }}" class="btn btn-sm btn-primary">编辑设置</a></td>
+        </tr>
+        {% endfor %}
+        {% if not groups %}
+        <tr><td colspan="9" style="text-align:center; color:var(--text-muted);">暂无群组数据</td></tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

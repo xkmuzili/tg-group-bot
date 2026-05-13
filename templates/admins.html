@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}管理员管理{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>👑 管理员管理</h2>
+    {% if current_role in ['creator', 'super_admin'] %}
+    <a href="{{ url_for('admin_add') }}" class="btn btn-primary">➕ 添加管理员</a>
+    {% endif %}
+</div>
+<div class="card">
+    <p style="color:var(--text-secondary); margin-bottom:16px;">共 {{ admins|length }} 位管理员</p>
+    <table>
+        <thead>
+            <tr><th>ID</th><th>用户名</th><th>角色</th><th>Telegram ID</th><th>管理群组</th><th>独立登录链接</th><th>最后登录</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+        {% for admin in admins %}
+        <tr>
+            <td>{{ admin.id }}</td>
+            <td><strong>{{ admin.username }}</strong></td>
+            <td>
+                {% if admin.role == 'creator' %}
+                <span class="badge" style="background:linear-gradient(135deg,#ff6b35,#ff2d78);color:#fff;">⭐ 创建者</span>
+                                {% elif admin.role == 'super_admin' %}
+                <span class="badge badge-warning">👑 超级管理员</span>
+                {% elif admin.role == 'admin' %}
+                <span class="badge badge-info">🛡️ 超级管理员</span>
+                {% else %}
+                <span class="badge">📝 管理员</span>
+                {% endif %}
+            </td>
+            <td>{{ admin.telegram_id or '-' }}</td>
+            <td style="max-width:200px; word-wrap:break-word;">
+                <span style="font-size:12px;">{{ admin_groups.get(admin.id, '无') }}</span>
+            </td>
+            <td>
+                {% if admin.login_token %}
+                <button class="btn btn-sm btn-success" onclick="copyLoginUrl('{{ admin.login_token }}')">复制链接</button>
+                {% else %}
+                <span style="color:var(--text-muted);">-</span>
+                {% endif %}
+            </td>
+            <td style="color:var(--text-secondary);">{{ admin.last_login or '从未' }}</td>
+            <td style="white-space:nowrap;">
+                {# === 操作按钮权限控制 === #}
+                {% set can_edit = false %}
+                {% set can_delete = false %}
+                {% set can_toggle_cap = false %}
+
+                {% if current_role == 'creator' %}
+                    {# 创建者可以操作所有人（除了不能重复设为创建者） #}
+                    {% set can_edit = true %}
+                    {% set can_delete = admin.role != 'creator' %}
+                    {% if admin.role == 'super_admin' %}
+                        {% set can_toggle_cap = true %}
+                    {% endif %}
+                {% elif current_role == 'super_admin' %}
+                    {# 超管只能操作 admin/editor，不能操作超管和创建者 #}
+                    {% if admin.role in ['admin', 'editor'] %}
+                        {% set can_edit = true %}
+                        {% set can_delete = true %}
+                    {% endif %}
+                {% endif %}
+
+                {% if can_edit %}
+                <a href="{{ url_for('admin_edit', admin_id=admin.id) }}" class="btn btn-sm btn-primary">编辑</a>
+                {% endif %}
+
+                {% if can_toggle_cap %}
+                <form method="POST" action="{{ url_for('toggle_create_super_admin', admin_id=admin.id) }}" style="display:inline;">
+                    {% set perms = admin.permissions | default('{}') | tojson %}
+                    <button type="submit" class="btn btn-sm" style="background:{% if admin.permissions and 'can_create_super_admin' in admin.permissions %}#28a745{% else %}#6c757d{% endif %};color:#fff;">
+                        {% if admin.permissions and 'can_create_super_admin' in admin.permissions %}✅ 可创建超管{% else %}🚫 禁止创建超管{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if can_delete %}
+                <form method="POST" action="{{ url_for('admin_delete', admin_id=admin.id) }}" style="display:inline;" onsubmit="return confirm('确定删除管理员 {{ admin.username }}？')">
+                    <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                </form>
+                {% endif %}
+
+                {% if not can_edit and not can_delete and not can_toggle_cap %}
+                <span style="color:var(--text-muted);">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyLoginUrl(token) {
+    const url = window.location.origin + '/t/' + token;
+    navigator.clipboard.writeText(url).then(() => alert('链接已复制'));
+}
+</script>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}操作日志 - 星辰守望者{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>📋 操作日志</h2>
+</div>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>时间</th><th>管理员</th><th>操作</th><th>目标</th><th>详情</th></tr>
+        </thead>
+        <tbody>
+        {% for log in logs %}
+        <tr>
+            <td style="white-space:nowrap; font-size:13px;">{{ log.created_at }}</td>
+            <td>{{ log.admin_username }}</td>
+            <td>
+                {% if log.action == 'reward' %}<span class="badge badge-success">奖励</span>
+                {% elif log.action == 'ban' %}<span class="badge badge-danger">封禁</span>
+                {% elif log.action == 'unban' %}<span class="badge badge-info">解封</span>
+                {% elif log.action == 'login' %}<span class="badge badge-info">登录</span>
+                {% else %}<span class="badge">{{ log.action }}</span>{% endif %}
+            </td>
+            <td>{{ log.target or '--' }}</td>
+            <td style="color:var(--text-secondary);">{{ log.details or '--' }}</td>
+        </tr>
+        {% endfor %}
+        {% if not logs %}
+        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">暂无日志</td></tr>
+        {% endif %}
+        </tbody>
+    </table>
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}<a href="?page={{ page-1 }}">上一页</a>{% endif %}
+        <span class="active">{{ page }} / {{ total_pages }}</span>
+        {% if page < total_pages %}<a href="?page={{ page+1 }}">下一页</a>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

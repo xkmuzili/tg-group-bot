@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}用户管理 - 星辰守望者{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>👥 用户管理</h2>
+</div>
+<div class="card">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+        {% for g in groups %}
+                <a href="{{ url_for('users_group', chat_id=g.chat_id) }}" style="text-decoration:none; color:inherit;">
+            <div style="background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:20px; transition:all 0.2s; cursor:pointer;"
+                 onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-2px)'"
+                 onmouseout="this.style.borderColor='var(--border)'; this.style.transform='none'">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <span style="font-size:18px; font-weight:600; color:var(--text-primary);">{{ g.title or ('群组 ' ~ g.chat_id) }}</span>
+                    <span class="badge badge-info">{{ g.user_count }} 人</span>
+                </div>
+                <div style="display:flex; gap:20px; color:var(--text-secondary); font-size:13px;">
+                    <span>💬 积分总计: <strong style="color:var(--text-primary);">{{ g.total_points }}</strong></span>
+                    <span>🔥 活跃: <strong style="color:var(--text-primary);">{{ g.active_users }}</strong></span>
+                    {% if g.banned_count > 0 %}
+                    <span>🚫 封禁: <strong style="color:var(--danger);">{{ g.banned_count }}</strong></span>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+        {% if not groups %}
+        <div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);">
+            暂无群组数据
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

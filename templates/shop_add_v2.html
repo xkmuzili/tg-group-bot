@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}添加商品{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>添加商品</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label">商品ID <span class="text-danger">*</span></label>
+                        <input type="text" name="item_id" class="form-control" required placeholder="唯一标识，如 iptv_30d">
+                        <div class="form-text">英文+下划线，唯一标识</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">商品名称 <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required placeholder="如：IPTV 30天会员">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea name="description" class="form-control" rows="2" placeholder="商品描述"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">价格（积分）<span class="text-danger">*</span></label>
+                            <input type="number" name="price" class="form-control" required min="1" value="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">商品类型 <span class="text-danger">*</span></label>
+                            <select name="type" class="form-select" id="itemType" onchange="toggleChatId()">
+                                <option value="general">普通商品</option>
+                                <option value="iptv_card">IPTV兑换卡</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="chatIdGroup" style="display:none">
+                        <label class="form-label">绑定群组</label>
+                        <select name="chat_id" class="form-select">
+                            <option value="">所有群组通用</option>
+                            {% for g in managed %}
+                            <option value="{{ g.chat_id }}">{{ g.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">IPTV兑换卡可选择绑定到特定群组</div>
+                    </div>
+                    <div class="alert alert-info" id="iptvHint" style="display:none">
+                        <i class="fas fa-info-circle me-1"></i>
+                        IPTV兑换卡：用户购买后自动从兑换码库中发放一个未使用的兑换码。请先在 <a href="{{ url_for('iptv_cards_list') }}">IPTV兑换码管理</a> 中导入兑换码。
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>添加</button>
+                        <a href="{{ url_for('shop_list') }}" class="btn btn-outline-secondary">返回</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function toggleChatId() {
+    var t = document.getElementById('itemType').value;
+    document.getElementById('chatIdGroup').style.display = t === 'iptv_card' ? 'block' : 'none';
+    document.getElementById('iptvHint').style.display = t === 'iptv_card' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

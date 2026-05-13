@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑商品' if item else '添加商品' }} - {{ group_title }}{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>{{ '✏️ 编辑商品' if item else '➕ 添加商品' }} - {{ group_title }}</h2>
+    <a href="{{ url_for('shop_group_items', chat_id=chat_id) }}" class="btn" style="background:var(--bg-hover); color:var(--text-primary);">返回商品列表</a>
+</div>
+<div class="card" style="max-width:600px;">
+    <form method="POST" onsubmit="return mergeType()">
+        <input type="hidden" name="type" id="typeHidden" value="{{ item.type if item else 'general' }}">
+        <div class="form-group">
+            <label>商品名称 *</label>
+            <input type="text" name="name" value="{{ item.name if item else '' }}" required placeholder="如：自定义头衔">
+        </div>
+        <div class="form-group">
+            <label>描述</label>
+            <input type="text" name="description" value="{{ item.description if item else '' }}" placeholder="商品描述...">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>价格（积分）*</label>
+                <input type="number" name="price" value="{{ item.price if item else 100 }}" min="1" required>
+            </div>
+            <div class="form-group">
+                <label>库存（-1=无限）</label>
+                <input type="number" name="stock" value="{{ item.stock if item else -1 }}">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>类型</label>
+            <select id="typeSelect" onchange="toggleCustomType()">
+                <option value="general" {{ 'selected' if (item.type if item else 'general') == 'general' }}>通用</option>
+                <option value="title" {{ 'selected' if (item.type if item else '') == 'title' }}>头衔</option>
+                <option value="mute_card" {{ 'selected' if (item.type if item else '') == 'mute_card' }}>禁言卡</option>
+                <option value="anti_spam" {{ 'selected' if (item.type if item else '') == 'anti_spam' }}>免广告卡</option>
+                <option value="double_checkin" {{ 'selected' if (item.type if item else '') == 'double_checkin' }}>签到双倍卡</option>
+                <option value="vip_7d" {{ 'selected' if (item.type if item else '') == 'vip_7d' }}>VIP会员(7天)</option>
+                <option value="iptv_card" {{ 'selected' if (item.type if item else '') == 'iptv_card' }}>兑换卡</option>
+                <option value="_custom_">自定义...</option>
+            </select>
+            <input type="text" id="customTypeInput" style="display:none;margin-top:8px;" placeholder="输入自定义类型名称">
+            <small style="color:var(--text-secondary);margin-top:4px;display:block;">选择预设类型或选择「自定义」输入任意类型</small>
+        </div>
+        <button type="submit" class="btn btn-success">{{ '保存修改' if item else '添加商品' }}</button>
+    </form>
+</div>
+<script>
+function toggleCustomType() {
+    var sel = document.getElementById('typeSelect');
+    var inp = document.getElementById('customTypeInput');
+    if (sel.value === '_custom_') {
+        inp.style.display = 'block';
+        inp.focus();
+    } else {
+        inp.style.display = 'none';
+        inp.value = '';
+    }
+}
+function mergeType() {
+    var sel = document.getElementById('typeSelect');
+    var inp = document.getElementById('customTypeInput');
+    var hidden = document.getElementById('typeHidden');
+    if (sel.value === '_custom_' && inp.value.trim()) {
+        hidden.value = inp.value.trim();
+    } else {
+        hidden.value = sel.value;
+    }
+    return true;
+}
+(function() {
+    var sel = document.getElementById('typeSelect');
+    var opts = Array.from(sel.options).map(function(o){return o.value});
+    var cur = '{{ item.type if item else "general" }}';
+    if (opts.indexOf(cur) === -1 && cur !== 'general') {
+        sel.value = '_custom_';
+        document.getElementById('customTypeInput').value = cur;
+        toggleCustomType();
+    }
+})();
+</script>
+{% endblock %}

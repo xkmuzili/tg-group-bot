@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}群组设置 - {{ chat_id }}{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>⚙️ 群组设置 <code style="font-size:14px;">{{ chat_id }}</code></h2>
+    <a href="{{ url_for('groups_list') }}" class="btn" style="background:var(--bg-hover); color:var(--text-primary);">返回列表</a>
+</div>
+<div class="card" style="max-width:700px;">
+    <form method="POST">
+        <div class="form-group">
+            <label>欢迎消息</label>
+            <textarea name="welcome_message" rows="4" placeholder="支持 {name} 变量">{{ settings.welcome_message if settings else '' }}</textarea>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" name="welcome_enabled" {% if settings and settings.welcome_enabled %}checked{% endif %} style="width:auto;">
+                    启用欢迎消息
+                </label>
+            </div>
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" name="anti_spam_enabled" {% if settings and settings.anti_spam_enabled %}checked{% endif %} style="width:auto;">
+                    启用反广告
+                </label>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" name="checkin_enabled" {% if settings and settings.checkin_enabled %}checked{% endif %} style="width:auto;">
+                    启用签到
+                </label>
+            </div>
+            <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" name="shop_enabled" {% if settings and settings.shop_enabled %}checked{% endif %} style="width:auto;">
+                    启用商城
+                </label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" name="verify_enabled" {% if settings and settings.verify_enabled %}checked{% endif %} style="width:auto;">
+                启用入群验证
+            </label>
+        </div>
+        <hr style="border-color:var(--border); margin:20px 0;">
+        <h3 style="margin-bottom:16px; font-size:16px;">⚡ 阈值设置</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label>警告阈值</label>
+                <input type="number" name="warn_threshold" value="{{ settings.warn_threshold if settings else 3 }}" min="1">
+            </div>
+            <div class="form-group">
+                <label>禁言阈值</label>
+                <input type="number" name="mute_threshold" value="{{ settings.mute_threshold if settings else 5 }}" min="1">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>封禁阈值</label>
+            <input type="number" name="ban_threshold" value="{{ settings.ban_threshold if settings else 10 }}" min="1" style="max-width:200px;">
+        </div>
+        <button type="submit" class="btn btn-success" style="margin-top:8px;">保存设置</button>
+    </form>
+</div>
+{% endblock %}

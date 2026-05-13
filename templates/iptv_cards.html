@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}IPTV兑换码管理{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="fas fa-ticket-alt me-2"></i>IPTV 兑换码管理</h4>
+    <div>
+        <a href="{{ url_for('iptv_cards_add') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus me-1"></i>导入兑换码</a>
+        <a href="{{ url_for('iptv_cards_export') }}" class="btn btn-outline-success btn-sm"><i class="fas fa-download me-1"></i>导出未使用</a>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0 text-primary">{{ unused_count }}</h3>
+                <small class="text-muted">未使用</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0 text-secondary">{{ used_count }}</h3>
+                <small class="text-muted">已使用</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0 text-info">{{ unused_count + used_count }}</h3>
+                <small class="text-muted">总计</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <form method="post" action="{{ url_for('iptv_cards_clear_used') }}" onsubmit="return confirm('确认清理所有已使用的兑换码？')">
+                    <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash me-1"></i>清理已使用</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if status == 'all' %}active{% endif %}" href="?status=all">全部</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if status == 'unused' %}active{% endif %}" href="?status=unused">未使用</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if status == 'used' %}active{% endif %}" href="?status=used">已使用</a>
+    </li>
+</ul>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>兑换码</th>
+                    <th>天数</th>
+                    <th>类型</th>
+                    <th>批次</th>
+                    <th>状态</th>
+                    <th>使用者</th>
+                    <th>使用时间</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in cards %}
+                <tr>
+                    {# card: 0=id, 1=code, 2=days, 3=card_type, 4=status, 5=used_by, 6=used_at, 7=batch_name, 8=created_at #}
+                    <td>{{ card[0] }}</td>
+                    <td><code>{{ card[1] }}</code></td>
+                    <td>{{ card[2] }}天</td>
+                    <td>
+                        {% if card[3] == 'normal' %}
+                        <span class="badge bg-info">普通</span>
+                        {% elif card[3] == 'trial' %}
+                        <span class="badge bg-warning">试用</span>
+                        {% elif card[3] == 'gift' %}
+                        <span class="badge bg-success">赠送</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ card[3] or 'normal' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ card[7] or '-' }}</td>
+                    <td>
+                        {% if card[4] == 'unused' %}
+                        <span class="badge bg-success">未使用</span>
+                        {% else %}
+                        <span class="badge bg-secondary">已使用</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ card[5] or '-' }}</td>
+                    <td>{{ card[6][:16] if card[6] else '-' }}</td>
+                    <td>{{ card[8][:16] if card[8] else '-' }}</td>
+                    <td>
+                        {% if card[4] == 'unused' %}
+                        <form method="post" action="{{ url_for('iptv_cards_delete', card_id=card[0]) }}" style="display:inline" onsubmit="return confirm('确认删除此兑换码？')">
+                            <button type="submit" class="btn btn-outline-danger btn-sm py-0"><i class="fas fa-trash"></i></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not cards %}
+                <tr><td colspan="10" class="text-center text-muted py-4">暂无兑换码</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

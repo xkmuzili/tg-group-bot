@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}兑换码管理{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>🎫 兑换码管理</h2>
+    {% if filter_chat_id %}
+    <div style="display:flex;gap:8px;">
+        <a href="{{ url_for('cards_list') }}" class="btn" style="background:var(--bg-hover);color:var(--text-primary);">← 返回群组列表</a>
+        <a href="{{ url_for('card_add') }}?chat_id={{ filter_chat_id }}" class="btn btn-success">➕ 添加兑换码</a>
+        <a href="{{ url_for('card_batch_add') }}?chat_id={{ filter_chat_id }}" class="btn" style="background:var(--accent);color:#fff;">📦 批量导入</a>
+    </div>
+    {% endif %}
+</div>
+
+{% if not filter_chat_id %}
+<!-- 群组选择卡片 -->
+<div class="card">
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+        {% for g in groups %}
+        <a href="{{ url_for('cards_list', chat_id=g.chat_id) }}" style="text-decoration:none; color:inherit;">
+            <div style="background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:20px; transition:all 0.2s; cursor:pointer;"
+                 onmouseover="this.style.borderColor='var(--accent)'; this.style.transform='translateY(-2px)'"
+                 onmouseout="this.style.borderColor='var(--border)'; this.style.transform='none'">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <span style="font-size:18px; font-weight:600; color:var(--text-primary);">{{ g.title or ('群组 ' ~ g.chat_id) }}</span>
+                </div>
+                <div style="display:flex; gap:20px; color:var(--text-secondary); font-size:13px;">
+                    <span>🎫 兑换卡: <strong style="color:var(--text-primary);">{{ g.card_count }}</strong></span>
+                    <span>✅ 未使用: <strong style="color:var(--success);">{{ g.unused_count }}</strong></span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+        {% if not groups %}
+        <div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text-muted);">
+            暂无群组数据
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<!-- 已选群组的兑换卡列表 -->
+<!-- 筛选栏 -->
+<div class="card" style="margin-bottom:16px;">
+    <form method="GET" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+        <input type="hidden" name="chat_id" value="{{ filter_chat_id }}">
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+            <label style="font-size:12px;color:var(--text-secondary);">商品</label>
+            <select name="item_id" style="width:100%;">
+                <option value="">全部商品</option>
+                {% for item in shop_items if item.chat_id|string == filter_chat_id|string %}
+                <option value="{{ item.item_id }}" {{ 'selected' if filter_item_id == item.item_id|string }}>{{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:0.5;min-width:100px;">
+            <label style="font-size:12px;color:var(--text-secondary);">状态</label>
+            <select name="status" style="width:100%;">
+                <option value="all" {{ 'selected' if filter_status == 'all' }}>全部</option>
+                <option value="unused" {{ 'selected' if filter_status == 'unused' }}>未使用</option>
+                <option value="used" {{ 'selected' if filter_status == 'used' }}>已使用</option>
+            </select>
+        </div>
+        <button type="submit" class="btn" style="background:var(--accent);color:#fff;height:36px;">筛选</button>
+        <a href="{{ url_for('cards_list', chat_id=filter_chat_id) }}" class="btn" style="background:var(--bg-hover);color:var(--text-primary);height:36px;">重置</a>
+    </form>
+</div>
+
+<!-- 统计 -->
+<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+    <div class="card" style="flex:1;min-width:120px;text-align:center;padding:12px;">
+        <div style="font-size:24px;font-weight:bold;color:var(--accent);">{{ total }}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">总计</div>
+    </div>
+    <div class="card" style="flex:1;min-width:120px;text-align:center;padding:12px;">
+        <div style="font-size:24px;font-weight:bold;color:var(--success);">{{ unused }}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">未使用</div>
+    </div>
+    <div class="card" style="flex:1;min-width:120px;text-align:center;padding:12px;">
+        <div style="font-size:24px;font-weight:bold;color:var(--text-secondary);">{{ used }}</div>
+        <div style="font-size:12px;color:var(--text-secondary);">已使用</div>
+    </div>
+</div>
+
+<!-- 兑换码列表 -->
+<div class="card">
+    {% if cards %}
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--border);color:var(--text-secondary);font-size:12px;">
+                <th style="padding:8px;text-align:left;">ID</th>
+                <th style="padding:8px;text-align:left;">兑换码</th>
+                <th style="padding:8px;text-align:center;">天数</th>
+                <th style="padding:8px;text-align:left;">绑定商品</th>
+                <th style="padding:8px;text-align:center;">状态</th>
+                <th style="padding:8px;text-align:left;">使用者</th>
+                <th style="padding:8px;text-align:left;">使用时间</th>
+                <th style="padding:8px;text-align:left;">批次</th>
+                <th style="padding:8px;text-align:center;">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card in cards %}
+            <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px;">{{ card.id }}</td>
+                <td style="padding:8px;font-family:monospace;">{{ card.code }}</td>
+                <td style="padding:8px;text-align:center;">{{ card.days }}天</td>
+                <td style="padding:8px;font-size:12px;">
+                    {% if card.shop_item_id %}
+                        {% for item in shop_items if item.item_id == card.shop_item_id %}
+                        {{ item.name }}
+                        {% else %}
+                        #{{ card.shop_item_id }}
+                        {% endfor %}
+                    {% else %}
+                        <span style="color:var(--text-secondary);">未绑定</span>
+                    {% endif %}
+                </td>
+                <td style="padding:8px;text-align:center;">
+                    {% if card.status == 'unused' %}
+                        <span style="color:var(--success);">✓ 未使用</span>
+                    {% else %}
+                        <span style="color:var(--text-secondary);">✗ 已使用</span>
+                    {% endif %}
+                </td>
+                <td style="padding:8px;font-size:12px;">{{ card.used_by or '-' }}</td>
+                <td style="padding:8px;font-size:12px;">{{ card.used_at[:16] if card.used_at else '-' }}</td>
+                <td style="padding:8px;font-size:12px;">{{ card.batch_name or '-' }}</td>
+                <td style="padding:8px;text-align:center;">
+                    <form method="POST" action="{{ url_for('card_toggle', card_id=card.id) }}?chat_id={{ filter_chat_id }}" style="display:inline;">
+                        <button type="submit" class="btn" style="padding:4px 8px;font-size:11px;background:var(--bg-hover);color:var(--text-primary);">
+                            {{ '恢复' if card.status == 'used' else '标记已用' }}
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('card_delete', card_id=card.id) }}?chat_id={{ filter_chat_id }}" style="display:inline;" onsubmit="return confirm('确定删除？')">
+                        <button type="submit" class="btn" style="padding:4px 8px;font-size:11px;background:var(--danger);color:#fff;">删除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:40px;color:var(--text-secondary);">
+        暂无兑换码
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

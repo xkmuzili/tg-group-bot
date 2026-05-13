@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ group_title or chat_id }} - 用户管理{% endblock %}
+{% block content %}
+<div class="header">
+    <h2>
+        <a href="{{ url_for('users_list') }}" style="color:var(--text-secondary); text-decoration:none; margin-right:8px;">👥 用户管理</a>
+        <span style="color:var(--text-muted);">›</span>
+        <span style="margin-left:8px;">{{ group_title or chat_id }}</span>
+    </h2>
+    <span style="font-size:14px; color:var(--text-muted);">共 {{ total }} 人</span>
+</div>
+<div class="card">
+    <form method="GET" class="search-bar">
+        <input type="text" name="search" placeholder="搜索用户名 / User ID..." value="{{ search }}">
+        <button type="submit" class="btn btn-primary">搜索</button>
+    </form>
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>用户名</th>
+                <th>昵称</th>
+                <th>积分</th>
+                <th>签到连续</th>
+                <th>VIP</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+            <td><code>{{ u.user_id }}</code></td>
+            <td>{{ u.username or '--' }}</td>
+            <td>{{ u.first_name or '--' }}</td>
+            <td><strong>{{ u.points }}</strong> <span style="color:var(--text-muted);">/ {{ u.total_points }}</span></td>
+            <td>{{ u.checkin_streak }}天</td>
+            <td>{% if u.is_vip %}<span class="badge badge-warning">VIP</span>{% else %}--{% endif %}</td>
+            <td>
+                {% if u.is_banned %}<span class="badge badge-danger">封禁</span>
+                {% elif u.is_muted %}<span class="badge badge-warning">禁言</span>
+                {% else %}<span class="badge badge-success">正常</span>{% endif %}
+            </td>
+            <td style="white-space:nowrap;">
+                <button class="btn btn-sm btn-success" onclick="showReward({{ u.chat_id }}, {{ u.user_id }}, '{{ u.username or u.first_name or u.user_id }}')">奖励</button>
+                {% if u.is_banned %}
+                <form method="POST" action="{{ url_for('unban_user', chat_id=u.chat_id, user_id=u.user_id) }}" style="display:inline;">
+                    <button class="btn btn-sm btn-primary" type="submit">解封</button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('ban_user', chat_id=u.chat_id, user_id=u.user_id) }}" style="display:inline;"
+                      onsubmit="return confirm('确定封禁该用户？')">
+                    <button class="btn btn-sm btn-danger" type="submit">封禁</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not users %}
+        <tr><td colspan="8" style="text-align:center; color:var(--text-muted);">无匹配用户</td></tr>
+        {% endif %}
+        </tbody>
+    </table>
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page-1 }}&search={{ search }}">上一页</a>
+        {% endif %}
+        {% for p in range(1, total_pages+1) %}
+            {% if p == page %}
+            <span class="active">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages-2 or (p >= page-2 and p <= page+2) %}
+            <a href="?page={{ p }}&search={{ search }}">{{ p }}</a>
+            {% elif p == 4 or p == total_pages-3 %}
+            <span>...</span>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="?page={{ page+1 }}&search={{ search }}">下一页</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+<!-- 奖励弹窗 -->
+<div id="rewardModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+    <div class="card" style="width:400px; max-width:90vw;">
+        <h3 style="margin-bottom:16px;">🎁 奖励积分</h3>
+        <p style="color:var(--text-secondary); margin-bottom:12px;" id="rewardTarget"></p>
+        <form method="POST" id="rewardForm">
+            <div class="form-group">
+                <label>积分数量</label>
+                <input type="number" name="points" value="100" min="1" max="100000">
+            </div>
+            <div class="form-group">
+                <label>原因</label>
+                <input type="text" name="reason" placeholder="奖励原因...">
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button type="submit" class="btn btn-success">确认奖励</button>
+                <button type="button" class="btn" style="background:var(--bg-hover); color:var(--text-primary);" onclick="closeReward()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showReward(chatId, userId, name) {
+    document.getElementById('rewardTarget').textContent = '目标: ' + name + ' (ID: ' + userId + ')';
+    document.getElementById('rewardForm').action = '/users/' + chatId + '/' + userId + '/reward';
+    document.getElementById('rewardModal').style.display = 'flex';
+}
+function closeReward() {
+    document.getElementById('rewardModal').style.display = 'none';
+}
+</script>
+{% endblock %}

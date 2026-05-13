@@ -92,6 +92,7 @@ python admin_panel.py
 | `/userinfo <用户>` | 查看用户详情 |
 | `/stats` | 群组统计 |
 | `/setwelcome <消息>` | 设置欢迎语 |
+| `/welcome` | 查看当前欢迎语 |
 | `/antispam on/off` | 广告防护开关 |
 | `/addword <词>` | 添加违禁词 |
 | `/delword <词>` | 删除违禁词 |

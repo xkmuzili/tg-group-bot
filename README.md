@@ -71,7 +71,6 @@ python admin_panel.py
 |------|------|
 | `/start` | 打开主菜单（支持深度链接 `verify_{chat_id}`） |
 | `/help` | 查看所有命令 |
-| `/about` | 机器人介绍 |
 | `/checkin` | 每日签到 |
 | `/points` | 查看积分 |
 | `/rank` | 积分排行榜 |

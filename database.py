@@ -538,3 +538,347 @@ async def get_pending_verifications(chat_id):
             (chat_id,)
         )
         return await cursor.fetchall()
+
+
+# ==================== 新功能表结构 ====================
+
+async def init_new_tables():
+    """初始化新功能的数据库表"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executescript('''
+            CREATE TABLE IF NOT EXISTS scheduled_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                message_text TEXT NOT NULL,
+                schedule_time TEXT NOT NULL,
+                repeat_type TEXT DEFAULT 'once',
+                created_by INTEGER NOT NULL,
+                is_sent INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                reporter_id INTEGER NOT NULL,
+                reported_user_id INTEGER NOT NULL,
+                message_text TEXT,
+                message_id INTEGER,
+                reason TEXT,
+                status TEXT DEFAULT 'pending',
+                reviewed_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS custom_commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                command_name TEXT NOT NULL,
+                response_text TEXT NOT NULL,
+                created_by INTEGER NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, command_name)
+            );
+
+            CREATE TABLE IF NOT EXISTS blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER,
+                username TEXT,
+                reason TEXT,
+                added_by INTEGER NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS whitelist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                reason TEXT,
+                added_by INTEGER NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS captcha_pending (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS message_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                msg_date TEXT NOT NULL,
+                msg_count INTEGER DEFAULT 0,
+                UNIQUE(chat_id, user_id, msg_date)
+            );
+
+            CREATE TABLE IF NOT EXISTS group_rules (
+                chat_id INTEGER PRIMARY KEY,
+                rules_text TEXT,
+                require_agree INTEGER DEFAULT 0
+            );
+        ''')
+        await db.commit()
+
+
+# ==================== 定时消息 ====================
+
+async def add_scheduled_message(chat_id, message_text, schedule_time, repeat_type, created_by):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO scheduled_messages (chat_id, message_text, schedule_time, repeat_type, created_by) VALUES (?,?,?,?,?)",
+            (chat_id, message_text, schedule_time, repeat_type, created_by)
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_pending_scheduled_messages():
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, chat_id, message_text, schedule_time, repeat_type FROM scheduled_messages WHERE is_sent=0 AND schedule_time<=datetime('now')"
+        )
+        return await cursor.fetchall()
+
+
+async def mark_scheduled_sent(msg_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE scheduled_messages SET is_sent=1 WHERE id=?", (msg_id,))
+        await db.commit()
+
+
+async def get_scheduled_messages(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, message_text, schedule_time, repeat_type, is_sent FROM scheduled_messages WHERE chat_id=? ORDER BY schedule_time DESC LIMIT 20",
+            (chat_id,)
+        )
+        return await cursor.fetchall()
+
+
+async def delete_scheduled_message(msg_id, chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM scheduled_messages WHERE id=? AND chat_id=?", (msg_id, chat_id))
+        await db.commit()
+
+
+# ==================== 举报系统 ====================
+
+async def add_report(chat_id, reporter_id, reported_user_id, message_text, message_id, reason):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO reports (chat_id, reporter_id, reported_user_id, message_text, message_id, reason) VALUES (?,?,?,?,?,?)",
+            (chat_id, reporter_id, reported_user_id, message_text, message_id, reason)
+        )
+        await db.commit()
+
+
+async def get_pending_reports(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, reporter_id, reported_user_id, message_text, reason, created_at FROM reports WHERE chat_id=? AND status='pending' ORDER BY created_at DESC",
+            (chat_id,)
+        )
+        return await cursor.fetchall()
+
+
+async def update_report_status(report_id, status, reviewed_by):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE reports SET status=?, reviewed_by=? WHERE id=?",
+            (status, reviewed_by, report_id)
+        )
+        await db.commit()
+
+
+# ==================== 自定义命令 ====================
+
+async def add_custom_command(chat_id, command_name, response_text, created_by):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO custom_commands (chat_id, command_name, response_text, created_by) VALUES (?,?,?,?)",
+            (chat_id, command_name, response_text, created_by)
+        )
+        await db.commit()
+
+
+async def get_custom_command(chat_id, command_name):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT response_text FROM custom_commands WHERE chat_id=? AND command_name=? AND enabled=1",
+            (chat_id, command_name)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+
+async def get_all_custom_commands(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT command_name, response_text, enabled FROM custom_commands WHERE chat_id=? ORDER BY command_name",
+            (chat_id,)
+        )
+        return await cursor.fetchall()
+
+
+async def delete_custom_command(chat_id, command_name):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM custom_commands WHERE chat_id=? AND command_name=?", (chat_id, command_name))
+        await db.commit()
+
+
+# ==================== 黑白名单 ====================
+
+async def add_to_blacklist(chat_id, user_id, reason, added_by):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO blacklist (chat_id, user_id, reason, added_by) VALUES (?,?,?,?)",
+            (chat_id, user_id, reason, added_by)
+        )
+        await db.commit()
+
+
+async def remove_from_blacklist(chat_id, user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM blacklist WHERE chat_id=? AND user_id=?", (chat_id, user_id))
+        await db.commit()
+
+
+async def is_blacklisted(chat_id, user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id FROM blacklist WHERE chat_id=? AND user_id=?", (chat_id, user_id)
+        )
+        return bool(await cursor.fetchone())
+
+
+async def get_blacklist(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, reason, created_at FROM blacklist WHERE chat_id=? ORDER BY created_at DESC",
+            (chat_id,)
+        )
+        return await cursor.fetchall()
+
+
+async def add_to_whitelist(chat_id, user_id, reason, added_by):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO whitelist (chat_id, user_id, reason, added_by) VALUES (?,?,?,?)",
+            (chat_id, user_id, reason, added_by)
+        )
+        await db.commit()
+
+
+async def remove_from_whitelist(chat_id, user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM whitelist WHERE chat_id=? AND user_id=?", (chat_id, user_id))
+        await db.commit()
+
+
+async def is_whitelisted(chat_id, user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id FROM whitelist WHERE chat_id=? AND user_id=?", (chat_id, user_id)
+        )
+        return bool(await cursor.fetchone())
+
+
+async def get_whitelist(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, reason, created_at FROM whitelist WHERE chat_id=? ORDER BY created_at DESC",
+            (chat_id,)
+        )
+        return await cursor.fetchall()
+
+
+# ==================== CAPTCHA ====================
+
+async def save_captcha(chat_id, user_id, question, answer):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO captcha_pending (chat_id, user_id, question, answer) VALUES (?,?,?,?)",
+            (chat_id, user_id, question, answer)
+        )
+        await db.commit()
+
+
+async def verify_captcha(chat_id, user_id, user_answer):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT answer FROM captcha_pending WHERE chat_id=? AND user_id=?",
+            (chat_id, user_id)
+        )
+        row = await cursor.fetchone()
+        if row and row[0].strip() == user_answer.strip():
+            await db.execute("DELETE FROM captcha_pending WHERE chat_id=? AND user_id=?", (chat_id, user_id))
+            await db.commit()
+            return True
+        return False
+
+
+# ==================== 消息统计 ====================
+
+async def record_message_stat(chat_id, user_id):
+    today = datetime.now().strftime("%Y-%m-%d")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO message_stats (chat_id, user_id, msg_date, msg_count)
+               VALUES (?, ?, ?, 1)
+               ON CONFLICT(chat_id, user_id, msg_date)
+               DO UPDATE SET msg_count = msg_count + 1""",
+            (chat_id, user_id, today)
+        )
+        await db.commit()
+
+
+async def get_message_stats(chat_id, days=7):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT msg_date, SUM(msg_count) as total
+               FROM message_stats WHERE chat_id=? AND msg_date>=date('now', ?)
+               GROUP BY msg_date ORDER BY msg_date""",
+            (chat_id, f'-{days} days')
+        )
+        return await cursor.fetchall()
+
+
+async def get_top_chatters(chat_id, limit=10, days=7):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """SELECT user_id, SUM(msg_count) as total
+               FROM message_stats WHERE chat_id=? AND msg_date>=date('now', ?)
+               GROUP BY user_id ORDER BY total DESC LIMIT ?""",
+            (chat_id, f'-{days} days', limit)
+        )
+        return await cursor.fetchall()
+
+
+# ==================== 群规 ====================
+
+async def get_group_rules(chat_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT rules_text, require_agree FROM group_rules WHERE chat_id=?", (chat_id,))
+        row = await cursor.fetchone()
+        if row:
+            return {"rules_text": row[0], "require_agree": row[1]}
+        return None
+
+
+async def set_group_rules(chat_id, rules_text, require_agree=0):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO group_rules (chat_id, rules_text, require_agree) VALUES (?,?,?)",
+            (chat_id, rules_text, require_agree)
+        )
+        await db.commit()
